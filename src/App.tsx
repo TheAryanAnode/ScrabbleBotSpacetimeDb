@@ -10,7 +10,7 @@ import type {
 } from "./module_bindings/types";
 
 const HOST = import.meta.env.VITE_STDB_HOST ?? "https://maincloud.spacetimedb.com";
-const DB_NAME = import.meta.env.VITE_STDB_DB ?? "wordsmith";
+const DB_NAME = import.meta.env.VITE_STDB_DB ?? "wordsmith-gf28z";
 
 interface Snapshot {
   match: MatchState | null;

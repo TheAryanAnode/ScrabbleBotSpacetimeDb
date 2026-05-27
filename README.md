@@ -25,19 +25,16 @@ The web client lives at the repo root (standard SpacetimeDB project layout); the
 
 ## Quick start
 
-1. **Start a local SpacetimeDB server** in one terminal:
-   ```bash
-   spacetime start
-   ```
-
-2. **Run dev mode** (from repo root, another terminal):
+1. **Run dev mode** (from repo root):
    ```bash
    npm install
    npm run dev
    ```
-   This launches `spacetime dev` (auto-builds + auto-publishes the module on file changes, regenerates client bindings) *and* the Vite client together. Edit `spacetimedb/src/lib.rs` and changes hot-reload through to the browser.
+   This launches `spacetime dev` against maincloud (auto-builds, auto-publishes, regenerates client bindings on module changes) *and* the Vite client together. Edit `spacetimedb/src/lib.rs` and changes hot-reload through to the browser.
 
-3. **Run one or more bots** (yet another terminal):
+   The maincloud database name is set in `spacetime.local.json` (currently `wordsmith-gf28z`). First run will create it under your maincloud account.
+
+2. **Run one or more bots** (another terminal):
    ```bash
    cd bot-starter
    npm install
@@ -46,12 +43,12 @@ The web client lives at the repo root (standard SpacetimeDB project layout); the
    ```
    Start a second bot in another terminal (`BOT_NAME=bob npm start`) so there's competition.
 
-4. **Start the match** from the spectator UI ("Start match" button), or call the `start_match` reducer directly.
+3. **Start the match** from the spectator UI ("Start match" button), or call the `start_match` reducer directly.
 
 ### Other npm scripts
 
-- `npm run dev:cloud` — same as `dev` but uses maincloud (skip step 1, but slower iteration).
-- `npm run publish` — one-shot publish to maincloud.
+- `npm run dev:local` — same flow against a local server. Requires `spacetime start` in another terminal first.
+- `npm run publish` — one-shot publish to the configured server.
 - `npm run generate` — regenerate client bindings without the watcher.
 - `npm run build` / `npm run preview` — production build of the spectator.
 

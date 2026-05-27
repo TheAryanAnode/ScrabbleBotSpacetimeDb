@@ -18,7 +18,7 @@ import * as path from "node:path";
 import { chooseWord, decideBid } from "./strategy.js";
 
 const HOST = process.env.STDB_HOST ?? "https://maincloud.spacetimedb.com";
-const DB_NAME = process.env.STDB_DB ?? "wordsmith";
+const DB_NAME = process.env.STDB_DB ?? "wordsmith-gf28z";
 const BOT_NAME = process.env.BOT_NAME ?? `bot-${Math.floor(Math.random() * 10000)}`;
 const TOKEN_PATH = path.join(process.cwd(), `.token-${BOT_NAME}`);
 
