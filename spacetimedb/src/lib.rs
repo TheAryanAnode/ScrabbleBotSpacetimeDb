@@ -223,7 +223,7 @@ pub fn register_bot(ctx: &ReducerContext, name: String) -> Result<(), String> {
     if ctx.db.bot().identity().find(ctx.sender()).is_some() {
         return Err("This identity is already registered".into());
     }
-    if ctx.db.bot().name().find(&trimmed.to_string()).is_some() {
+    if ctx.db.bot().name().find(trimmed.to_string()).is_some() {
         return Err("Name already taken".into());
     }
     ctx.db.bot().insert(Bot {
@@ -253,7 +253,7 @@ pub fn spawn_simulated_bot(
     if matches!(strategy, BotStrategy::Human) {
         return Err("Simulated bots cannot use the Human strategy".into());
     }
-    if ctx.db.bot().name().find(&trimmed.to_string()).is_some() {
+    if ctx.db.bot().name().find(trimmed.to_string()).is_some() {
         return Err("Name already taken".into());
     }
     // Deterministic fabricated identity so simulated bots persist across calls.
@@ -300,7 +300,7 @@ pub fn reset_match(ctx: &ReducerContext) -> Result<(), String> {
     // Clear all per-match tables.
     let auction_ids: Vec<u64> = ctx.db.auction().iter().map(|a| a.id).collect();
     for id in auction_ids {
-        ctx.db.auction().id().delete(&id);
+        ctx.db.auction().id().delete(id);
     }
     let result_ids: Vec<u64> = ctx
         .db
@@ -309,19 +309,19 @@ pub fn reset_match(ctx: &ReducerContext) -> Result<(), String> {
         .map(|r| r.auction_id)
         .collect();
     for id in result_ids {
-        ctx.db.auction_result().auction_id().delete(&id);
+        ctx.db.auction_result().auction_id().delete(id);
     }
     let bid_ids: Vec<u64> = ctx.db.pending_bid().iter().map(|b| b.id).collect();
     for id in bid_ids {
-        ctx.db.pending_bid().id().delete(&id);
+        ctx.db.pending_bid().id().delete(id);
     }
     let holding_ids: Vec<u64> = ctx.db.holding().iter().map(|h| h.id).collect();
     for id in holding_ids {
-        ctx.db.holding().id().delete(&id);
+        ctx.db.holding().id().delete(id);
     }
     let play_ids: Vec<u64> = ctx.db.word_play().iter().map(|p| p.id).collect();
     for id in play_ids {
-        ctx.db.word_play().id().delete(&id);
+        ctx.db.word_play().id().delete(id);
     }
     let schedule_ids: Vec<u64> = ctx
         .db
@@ -330,7 +330,7 @@ pub fn reset_match(ctx: &ReducerContext) -> Result<(), String> {
         .map(|s| s.scheduled_id)
         .collect();
     for id in schedule_ids {
-        ctx.db.auction_schedule().scheduled_id().delete(&id);
+        ctx.db.auction_schedule().scheduled_id().delete(id);
     }
     // Refill the bag from scratch.
     let existing_letters: Vec<String> = ctx.db.bag_letter().iter().map(|b| b.letter).collect();
@@ -440,7 +440,7 @@ pub fn submit_bid(ctx: &ReducerContext, auction_id: u64, amount: i64) -> Result<
         .db
         .auction()
         .id()
-        .find(&auction_id)
+        .find(auction_id)
         .ok_or("Unknown auction")?;
     if auction.status != AuctionStatus::Open {
         return Err("Auction closed".into());
@@ -459,7 +459,7 @@ pub fn submit_bid(ctx: &ReducerContext, auction_id: u64, amount: i64) -> Result<
         .map(|b| b.id)
         .collect();
     for id in existing {
-        ctx.db.pending_bid().id().delete(&id);
+        ctx.db.pending_bid().id().delete(id);
     }
 
     ctx.db.pending_bid().insert(PendingBid {
@@ -535,8 +535,8 @@ pub fn submit_word(ctx: &ReducerContext, word: String) -> Result<(), String> {
         let (hid, ct) = by_letter[c];
         let new_ct = ct - n;
         if new_ct == 0 {
-            ctx.db.holding().id().delete(&hid);
-        } else if let Some(h) = ctx.db.holding().id().find(&hid) {
+            ctx.db.holding().id().delete(hid);
+        } else if let Some(h) = ctx.db.holding().id().find(hid) {
             ctx.db.holding().id().update(Holding {
                 count: new_ct,
                 ..h
@@ -590,7 +590,7 @@ pub fn auction_tick(ctx: &ReducerContext, _job: AuctionSchedule) {
     let Some(auction_id) = m.current_auction_id else {
         return;
     };
-    let Some(auction) = ctx.db.auction().id().find(&auction_id) else {
+    let Some(auction) = ctx.db.auction().id().find(auction_id) else {
         return;
     };
 
@@ -675,7 +675,7 @@ pub fn auction_tick(ctx: &ReducerContext, _job: AuctionSchedule) {
         ..auction
     });
     for b in bids {
-        ctx.db.pending_bid().id().delete(&b.id);
+        ctx.db.pending_bid().id().delete(b.id);
     }
 
     // Now that the winner has the tile, let simulated winners try a word.
@@ -760,7 +760,7 @@ fn draw_letter(ctx: &ReducerContext) -> Option<String> {
 }
 
 fn return_to_bag(ctx: &ReducerContext, letter: &str) {
-    if let Some(bag) = ctx.db.bag_letter().letter().find(&letter.to_string()) {
+    if let Some(bag) = ctx.db.bag_letter().letter().find(letter.to_string()) {
         ctx.db.bag_letter().letter().update(BagLetter {
             remaining: bag.remaining + 1,
             letter: bag.letter.clone(),
@@ -818,7 +818,7 @@ fn simulate_bids(ctx: &ReducerContext, auction: &Auction) {
             .map(|b| b.id)
             .collect();
         for id in prior {
-            ctx.db.pending_bid().id().delete(&id);
+            ctx.db.pending_bid().id().delete(id);
         }
         ctx.db.pending_bid().insert(PendingBid {
             id: 0,
@@ -867,8 +867,8 @@ fn simulate_word_play(ctx: &ReducerContext, bot_identity: Identity) {
         let (hid, ct) = by_letter[c];
         let new_ct = ct - n;
         if new_ct == 0 {
-            ctx.db.holding().id().delete(&hid);
-        } else if let Some(h) = ctx.db.holding().id().find(&hid) {
+            ctx.db.holding().id().delete(hid);
+        } else if let Some(h) = ctx.db.holding().id().find(hid) {
             ctx.db.holding().id().update(Holding {
                 count: new_ct,
                 ..h
