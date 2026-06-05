@@ -6,5 +6,6 @@ target/
 Cargo.lock
 .env.local
 .token-*
-src/module_bindings/
+# bot-starter bindings still ignored (regenerated per checkout). Web app's
+# bindings are tracked so the production build doesn't need spacetime CLI.
 bot-starter/src/module_bindings/

@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useConn } from "../connection";
-import type { BotCredential, CredentialNonce } from "../module_bindings/types";
+import { DbConnection } from "../module_bindings";
+import type { BotCredential } from "../module_bindings/types";
+
+const HOST = import.meta.env.VITE_STDB_HOST ?? "https://maincloud.spacetimedb.com";
+const DB_NAME = import.meta.env.VITE_STDB_DB ?? "scrabblebot";
+
+type GenStatus = "idle" | "minting" | "claiming" | "done" | "error";
 
 export default function Team() {
-  const { conn, identity, version, dbName } = useConn();
+  const { conn, identity, version } = useConn();
   void version;
-  const [minting, setMinting] = useState(false);
-  const [latestNonce, setLatestNonce] = useState<string | null>(null);
+  const [gen, setGen] = useState<GenStatus>("idle");
+  const [genError, setGenError] = useState<string | null>(null);
+  const [genToken, setGenToken] = useState<string | null>(null);
+  const [genIdentity, setGenIdentity] = useState<string | null>(null);
 
   if (!conn || !identity) {
     return (
@@ -25,7 +33,7 @@ export default function Team() {
         </div>
         <section className="panel full">
           <p className="secondary">
-            You're not on a team. <Link to="/team/new">Create one →</Link>
+            You're not on a team. <Link to="/team/new">Create or join one →</Link>
           </p>
         </section>
       </>
@@ -38,30 +46,80 @@ export default function Team() {
   }
   credentials.sort(
     (a, b) =>
-      Number(b.lastSeen.__timestamp_micros_since_unix_epoch__ - a.lastSeen.__timestamp_micros_since_unix_epoch__),
+      Number(
+        b.lastSeen.__timestamp_micros_since_unix_epoch__ -
+          a.lastSeen.__timestamp_micros_since_unix_epoch__,
+      ),
   );
 
-  const myNonces: CredentialNonce[] = [];
-  for (const n of conn.db.my_nonces.iter()) myNonces.push(n);
-  myNonces.sort(
-    (a, b) =>
-      Number(b.expiresAt.__timestamp_micros_since_unix_epoch__ - a.expiresAt.__timestamp_micros_since_unix_epoch__),
-  );
-  const currentNonces = myNonces.filter((n) => n.botId === team.botId);
+  // Mint a nonce → open a fresh anon connection → redeem it →
+  // hand the user the resulting token.
+  async function generateToken() {
+    if (!conn) return;
+    setGen("minting");
+    setGenError(null);
+    setGenToken(null);
+    setGenIdentity(null);
 
-  function mintNonce() {
-    if (!conn || !team) return;
-    setMinting(true);
-    const botId = team.botId;
-    const before = new Set(currentNonces.map((n) => n.code));
+    const before = new Set<string>();
+    for (const n of conn.db.my_nonces.iter()) before.add(n.code);
     conn.reducers.mintCredentialNonce({});
-    setTimeout(() => {
-      const after: CredentialNonce[] = [];
-      for (const n of conn.db.my_nonces.iter()) after.push(n);
-      const fresh = after.find((n) => n.botId === botId && !before.has(n.code));
-      setLatestNonce(fresh?.code ?? null);
-      setMinting(false);
-    }, 600);
+
+    // Wait briefly for the nonce row to land in my_nonces.
+    let code: string | null = null;
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      for (const n of conn.db.my_nonces.iter()) {
+        if (n.botId === team!.botId && !before.has(n.code)) {
+          code = n.code;
+          break;
+        }
+      }
+      if (code) break;
+    }
+    if (!code) {
+      setGen("error");
+      setGenError("Couldn't read the freshly-minted nonce. Try again?");
+      return;
+    }
+
+    // Open a fresh anonymous connection — no saved token, no shared identity.
+    setGen("claiming");
+    const freshConn = DbConnection.builder()
+      .withUri(HOST)
+      .withDatabaseName(DB_NAME)
+      .onConnect((c, id, token) => {
+        setGenIdentity(id.toHexString());
+        setGenToken(token); // capture before disconnecting
+        c.subscriptionBuilder()
+          .onApplied(() => {
+            c.reducers.claimCredential({ code: code! });
+            // Give the credential a moment to land, then verify.
+            setTimeout(() => {
+              const ok = !!c.db.bot_credential.identity.find(id);
+              if (ok) {
+                setGen("done");
+              } else {
+                setGen("error");
+                setGenError(
+                  "Claim didn't take. Refresh and try again?",
+                );
+              }
+              try {
+                c.disconnect();
+              } catch {
+                /* */
+              }
+            }, 1200);
+          })
+          .subscribeToAllTables();
+      })
+      .onConnectError((_ctx, err) => {
+        setGen("error");
+        setGenError(`Couldn't open fresh connection: ${err.message}`);
+      })
+      .build();
+    void freshConn;
   }
 
   return (
@@ -71,41 +129,69 @@ export default function Team() {
         <span className="status">{team.role.tag}</span>
       </div>
 
-      <section className="panel">
-        <h2>Bot</h2>
-        <div className="row">
-          <span className="name">{team.botName}</span>
-          <span className="secondary">id #{String(team.botId)}</span>
-        </div>
-        <div className="row">
-          <span>Credentials</span>
-          <span>{team.credentialCount}</span>
-        </div>
-        <div className="row">
-          <span>Active nonces</span>
-          <span>{currentNonces.length}</span>
+      <section className="panel full">
+        <h2>Bot: {team.botName}</h2>
+        <div className="secondary">
+          id #{String(team.botId)} · {credentials.length} credentials ·{" "}
+          {credentials.filter((c) => c.connected).length} currently connected
         </div>
       </section>
 
-      <section className="panel">
-        <h2>Add a credential</h2>
+      <section className="panel full">
+        <h2>Generate a token for your bot</h2>
         <p>
-          Mint a one-time code below. Plug it into your bot via{" "}
-          <code>BOT_NONCE=&lt;code&gt;</code> on its first run; it'll redeem the code and
-          persist a token.
+          One click and you'll get a SpacetimeDB token bound to a new credential for your
+          bot. Plug it into your bot's <code>withToken(...)</code> call and you're done.
         </p>
-        <button className="button" onClick={mintNonce} disabled={minting}>
-          {minting ? "Minting…" : "Mint credential nonce"}
-        </button>
-        {latestNonce && (
-          <div style={{ marginTop: 16 }}>
+
+        {gen === "idle" && (
+          <button className="button" onClick={generateToken}>
+            Generate token
+          </button>
+        )}
+        {gen === "minting" && <div className="secondary">Minting nonce…</div>}
+        {gen === "claiming" && <div className="secondary">Claiming credential…</div>}
+        {gen === "error" && (
+          <>
+            <div style={{ color: "var(--warn)", marginBottom: 8 }}>{genError}</div>
+            <button className="button" onClick={() => setGen("idle")}>
+              Try again
+            </button>
+          </>
+        )}
+        {gen === "done" && genToken && (
+          <div style={{ marginTop: 12 }}>
             <div className="secondary" style={{ marginBottom: 4 }}>
-              New nonce (valid 1h):
+              Bot identity (this credential's identity):
             </div>
-            <code style={codeBlock}>{latestNonce}</code>
-            <p className="secondary" style={{ marginTop: 8 }}>
-              Use it: <code>BOT_NAME={team.botName} BOT_NONCE={latestNonce} npm start</code>
+            <code style={codeBlock}>{genIdentity}</code>
+            <div className="secondary" style={{ margin: "12px 0 4px" }}>
+              Token — save this. It will only be shown once.
+            </div>
+            <code style={codeBlock}>{genToken}</code>
+            <p className="secondary" style={{ marginTop: 12 }}>
+              Use in your bot:
+              <br />
+              <code>DbConnection.builder().withToken("&lt;the token above&gt;")...</code>
             </p>
+            <p className="secondary">
+              Or with the starter kit:
+              <br />
+              <code>
+                BOT_NAME={team.botName} BOT_TOKEN=&lt;token&gt; npm start
+              </code>
+            </p>
+            <button
+              className="button"
+              style={{ marginTop: 12 }}
+              onClick={() => {
+                setGen("idle");
+                setGenToken(null);
+                setGenIdentity(null);
+              }}
+            >
+              Generate another
+            </button>
           </div>
         )}
       </section>
@@ -140,56 +226,11 @@ export default function Team() {
         </table>
         {credentials.length === 0 && (
           <div className="secondary" style={{ padding: 12 }}>
-            No credentials yet. Mint a nonce above and run your bot with{" "}
-            <code>BOT_NONCE</code>.
+            No credentials yet. Click "Generate token" above to make one.
           </div>
         )}
       </section>
 
-      <section className="panel full">
-        <h2>CLI mode</h2>
-        <p>
-          The whole flow works from CLI too — no need to use this page:
-        </p>
-        <pre style={preStyle}>
-          {`# 1) Mint a nonce
-spacetime call ${dbName} mint_credential_nonce
-
-# 2) Read it back
-spacetime sql ${dbName} "SELECT code FROM my_nonces WHERE bot_id = ${team.botId}"
-
-# 3) Run the bot
-BOT_NAME=${team.botName} BOT_NONCE=<code> npm start`}
-        </pre>
-      </section>
-
-      {currentNonces.length > 0 && (
-        <section className="panel full">
-          <h2>Outstanding nonces</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Expires</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentNonces.map((n) => (
-                <tr key={n.code}>
-                  <td>
-                    <code>{n.code}</code>
-                  </td>
-                  <td className="secondary">
-                    {new Date(
-                      Number(n.expiresAt.__timestamp_micros_since_unix_epoch__) / 1000,
-                    ).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
     </>
   );
 }
@@ -201,13 +242,5 @@ const codeBlock: React.CSSProperties = {
   padding: 8,
   borderRadius: 6,
   border: "1px solid var(--border)",
-  fontSize: 14,
-};
-const preStyle: React.CSSProperties = {
-  background: "var(--bg)",
-  border: "1px solid var(--border)",
-  borderRadius: 6,
-  padding: 12,
-  overflow: "auto",
   fontSize: 13,
 };

@@ -46,7 +46,7 @@ export default function Account() {
             manage a team and bot from either the website or the command line.
           </p>
           <pre style={preStyle}>
-            spacetime call <code>{dbName}</code> connect_id {webHex}
+            spacetime call {dbName} connect_id '["0x{webHex}"]'
           </pre>
           <p className="secondary">
             Run that in any terminal where <code>spacetime login</code> is configured. Then

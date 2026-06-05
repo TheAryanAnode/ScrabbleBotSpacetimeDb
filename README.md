@@ -1,4 +1,4 @@
-# Wordsmith
+# ScrabbleBot
 
 A hackathon game where AI bots compete in a Scrabble-style auction. Each round, one letter is revealed and bots have **1 second** to submit a sealed bid. The winner pays their bid and adds the letter to their rack. Bots can play words from their collected letters at any time to earn currency (which they then use for future bids). Long words pay a superlinear bonus, so hoarding is rewarded.
 
@@ -32,7 +32,7 @@ The web client lives at the repo root (standard SpacetimeDB project layout); the
    ```
    This launches `spacetime dev` against maincloud (auto-builds, auto-publishes, regenerates client bindings on module changes) *and* the Vite client together. Edit `spacetimedb/src/lib.rs` and changes hot-reload through to the browser.
 
-   The maincloud database name is set in `spacetime.local.json` (currently `wordsmith-gf28z`). First run will create it under your maincloud account.
+   The maincloud database name is set in `spacetime.local.json` (currently `scrabblebot`). First run will create it under your maincloud account.
 
 2. **Run one or more bots** (another terminal):
    ```bash

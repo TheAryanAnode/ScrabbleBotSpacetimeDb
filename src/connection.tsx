@@ -5,7 +5,7 @@ import { DbConnection } from "./module_bindings";
 import type { Identity } from "spacetimedb";
 
 const HOST = import.meta.env.VITE_STDB_HOST ?? "https://maincloud.spacetimedb.com";
-const DB_NAME = import.meta.env.VITE_STDB_DB ?? "wordsmith";
+const DB_NAME = import.meta.env.VITE_STDB_DB ?? "scrabblebot";
 
 interface Ctx {
   conn: DbConnection | null;
@@ -52,7 +52,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setVersion(versionRef.current);
     };
 
-    const token = idToken ?? localStorage.getItem("wordsmith-token") ?? undefined;
+    const token = idToken ?? localStorage.getItem("scrabblebot-token") ?? undefined;
     const c = DbConnection.builder()
       .withUri(HOST)
       .withDatabaseName(DB_NAME)
@@ -64,7 +64,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         }
         // Only cache anonymous tokens — never the OIDC one (it's short-lived
         // and managed by oidc-client-ts).
-        if (!idToken) localStorage.setItem("wordsmith-token", freshToken);
+        if (!idToken) localStorage.setItem("scrabblebot-token", freshToken);
         setIdentity(id);
         setConnected(true);
         c.subscriptionBuilder().onApplied(bump).subscribeToAllTables();

@@ -1,8 +1,8 @@
-// Wordsmith bot starter.
+// ScrabbleBot bot starter.
 //
 // First run (claim a credential):
 //   1. From the website, your team mints a nonce. Or from CLI:
-//      `spacetime call wordsmith mint_credential_nonce`
+//      `spacetime call scrabblebot mint_credential_nonce`
 //      `spacetime sql 'SELECT code FROM my_nonces ORDER BY expires_at DESC'`
 //   2. Run the bot with the nonce:
 //      `BOT_NONCE=<code> npm start`
@@ -25,7 +25,7 @@ import * as path from "node:path";
 import { chooseWord, decideBid } from "./strategy.js";
 
 const HOST = process.env.STDB_HOST ?? "https://maincloud.spacetimedb.com";
-const DB_NAME = process.env.STDB_DB ?? "wordsmith-gf28z";
+const DB_NAME = process.env.STDB_DB ?? "scrabblebot";
 const BOT_NAME = process.env.BOT_NAME ?? "bot";
 const BOT_NONCE = process.env.BOT_NONCE; // only used on first run
 const TOKEN_PATH = path.join(process.cwd(), `.token-${BOT_NAME}`);

@@ -19,7 +19,7 @@ export default function Home() {
   return (
     <>
       <div className="header full">
-        <h1>Wordsmith</h1>
+        <h1>ScrabbleBot</h1>
         <span className="status">
           {bots.length} bots · {running.length} running · {ended.length} completed
         </span>
@@ -28,7 +28,7 @@ export default function Home() {
       <section className="panel full">
         <h2>What is this?</h2>
         <p>
-          Wordsmith is a Scrabble-style auction game for AI bots. Each round, one letter is revealed
+          ScrabbleBot is a Scrabble-style auction game for AI bots. Each round, one letter is revealed
           and bots have <b>1 second</b> to submit a sealed bid. The winner pays (depending on the
           auction type) and adds the letter to their rack. Bots play words from their collected
           letters to earn currency, which they use to bid on future tiles.

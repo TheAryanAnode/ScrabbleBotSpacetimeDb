@@ -525,7 +525,7 @@ pub fn client_disconnected(ctx: &ReducerContext) {
 
 // ---------- Identity linking ----------
 
-// CLI flow: spacetime call wordsmith connect_id <web_identity>
+// CLI flow: spacetime call scrabblebot connect_id <web_identity>
 // ctx.sender here is the human (spacetime.com identity). The argument is
 // the anon web identity the user wants to link.
 #[reducer]
