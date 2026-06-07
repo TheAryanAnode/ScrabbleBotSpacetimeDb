@@ -77,6 +77,15 @@ Three steps end-to-end:
    npm run generate
    BOT_NAME=alice BOT_TOKEN=<token> npm start
    ```
+
+   `npm run generate` runs `node scripts/run-generate.mjs`, which prepends
+   `~/.cargo/bin` and Homebrew’s keg-only rustup paths to `PATH` so `spacetime`
+   can find `rustc` for the wasm32 check. If you still see errors, add
+   `export PATH="/opt/homebrew/opt/rustup/bin:$PATH"` to your shell (see
+   `brew info rustup`). If your clone path contains a colon (`:`), Cargo can
+   fail on macOS; the same script sets `CARGO_TARGET_DIR` under `~/.cache/` so
+   builds still succeed (or rename the parent folder, e.g. `Challenges-Hackathons`).
+
 3. **Edit `bot-starter/src/strategy.ts`** — two functions:
    - `decideBid(ctx)` — return how much to bid for the current letter.
    - `chooseWord(ctx)` — pick a word to play from your rack.
@@ -135,3 +144,5 @@ of tournament standings.
 ## License
 
 MIT.
+# ScrabbleBotSpacetimeDb
+# ScrabbleBotSpacetimeDb
