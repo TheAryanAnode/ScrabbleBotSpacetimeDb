@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path ../spacetimedb",
-    "start": "tsx src/index.ts",
+    "generate": "node scripts/run-generate.mjs",
+    "generate:upstream": "node scripts/generate-from-upstream.mjs",
+    "start": "node ./node_modules/tsx/dist/cli.mjs src/index.ts",
     "build": "tsc"
   },
   "dependencies": {
-    "spacetimedb": "^2.2.0",
+    "spacetimedb": "^2.4.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

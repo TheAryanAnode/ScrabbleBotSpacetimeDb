@@ -7,6 +7,8 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AddAdminReducer from "../add_admin_reducer";
+import BackfillEloReducer from "../backfill_elo_reducer";
+import BackfillTopBidArchiveReducer from "../backfill_top_bid_archive_reducer";
 import BootstrapAdminReducer from "../bootstrap_admin_reducer";
 import ClaimCredentialReducer from "../claim_credential_reducer";
 import ConnectIdReducer from "../connect_id_reducer";
@@ -23,6 +25,8 @@ import SubmitBidReducer from "../submit_bid_reducer";
 import SubmitWordReducer from "../submit_word_reducer";
 
 export type AddAdminParams = __Infer<typeof AddAdminReducer>;
+export type BackfillEloParams = __Infer<typeof BackfillEloReducer>;
+export type BackfillTopBidArchiveParams = __Infer<typeof BackfillTopBidArchiveReducer>;
 export type BootstrapAdminParams = __Infer<typeof BootstrapAdminReducer>;
 export type ClaimCredentialParams = __Infer<typeof ClaimCredentialReducer>;
 export type ConnectIdParams = __Infer<typeof ConnectIdReducer>;

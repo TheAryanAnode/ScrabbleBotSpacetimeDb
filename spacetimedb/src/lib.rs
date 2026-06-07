@@ -393,13 +393,16 @@ pub struct AuctionResult {
     pub closed_at: Timestamp,
 }
 
-// Private — the winner's top bid is interesting to spectators but is
-// sensitive info that bots shouldn't see (it leaks the winner's true
-// valuation and undermines Vickrey's truth-telling). Exposed through the
-// `visible_auction_top_bids` view, which returns empty for callers that
-// hold a BotCredential.
+// Private — live, in-progress matches. Top bid is sensitive while a match
+// is running (it leaks the winner's true valuation and would undermine
+// Vickrey's truth-telling if competing bots could see it). The
+// `visible_auction_top_bids` view exposes these to spectators only, bounded
+// to Running matches. On match end, rows here are moved to
+// `auction_top_bid_archive` (public) so spectators can replay finished
+// matches without any view-body cost.
 #[table(
     accessor = auction_top_bid,
+    index(accessor = top_bid_by_match, btree(columns = [match_id])),
     index(accessor = top_bid_visible, btree(columns = [visible]))
 )]
 #[derive(Clone)]
@@ -408,10 +411,25 @@ pub struct AuctionTopBid {
     pub auction_id: u64,
     pub match_id: u64,
     pub top_bid: i64,
-    // Always true. Required because SpacetimeDB views in 2.2 can't iterate
-    // arbitrary tables — only filter by an indexed column. We index on
-    // this and filter by `true` to enumerate everything in the view.
+    // Unused. Originally indexed for view enumeration; the view now uses
+    // `top_bid_by_match` driven by match status. Kept for schema compat.
     pub visible: bool,
+}
+
+// Public — post-match archive of top_bid. Inserted by `on_match_ended` once
+// the match is no longer live (bots can't act on the info, so it's safe to
+// expose). Spectators subscribe `WHERE match_id = ?` from the match page.
+#[table(
+    accessor = auction_top_bid_archive,
+    public,
+    index(accessor = archive_by_match, btree(columns = [match_id]))
+)]
+#[derive(Clone)]
+pub struct AuctionTopBidArchive {
+    #[primary_key]
+    pub auction_id: u64,
+    pub match_id: u64,
+    pub top_bid: i64,
 }
 
 #[table(
@@ -455,6 +473,10 @@ pub struct BotStats {
     pub wins: u32,
     pub total_score: i64,
     pub last_played: Option<Timestamp>,
+    #[default(25.0_f64)]
+    pub openskill_mu: f64,
+    #[default(8.333333333333334_f64)]
+    pub openskill_sigma: f64,
 }
 
 #[table(accessor = tournament, public)]
@@ -547,9 +569,12 @@ fn my_team(ctx: &ViewContext) -> Option<MyTeam> {
     })
 }
 
-// Spectator-only view of the winning bid amount. Callers that hold a
+// Spectator-only view of live winning-bid amounts. Callers that hold a
 // BotCredential (real bots in the game) get an empty Vec; everyone else
-// sees the data.
+// sees the data for all currently-Running matches. Bounded by an indexed
+// nested-loop join through match status, so the result is small even as
+// the underlying private table grows. Ended-match top_bids live in the
+// public `auction_top_bid_archive` table; subscribe there for replays.
 #[view(accessor = visible_auction_top_bids, public)]
 fn visible_auction_top_bids(ctx: &ViewContext) -> Vec<AuctionTopBid> {
     if ctx
@@ -561,11 +586,18 @@ fn visible_auction_top_bids(ctx: &ViewContext) -> Vec<AuctionTopBid> {
     {
         return vec![];
     }
-    ctx.db
-        .auction_top_bid()
-        .top_bid_visible()
-        .filter(true)
-        .collect()
+    let mut out = Vec::new();
+    for m in ctx
+        .db
+        .match_state()
+        .match_by_status()
+        .filter(MatchStatus::Running)
+    {
+        for t in ctx.db.auction_top_bid().top_bid_by_match().filter(m.id) {
+            out.push(t);
+        }
+    }
+    out
 }
 
 // Nonces the caller has minted. Private to the caller.
@@ -1091,6 +1123,50 @@ pub fn spawn_simulated_bot(
     Ok(())
 }
 
+// One-shot migration helper: move historical `auction_top_bid` rows for
+// ended matches into the public `auction_top_bid_archive`. New matches
+// archive automatically via `on_match_ended`; this drains the backlog from
+// before the archive existed. Chunked because the table held ~1.4M rows;
+// `max_rows` caps the work per call so the reducer stays under the time
+// budget. Admin re-invokes until it reports zero moved.
+#[reducer]
+pub fn backfill_top_bid_archive(ctx: &ReducerContext, max_rows: u32) -> Result<(), String> {
+    require_admin(ctx)?;
+    if max_rows == 0 {
+        return Err("max_rows must be > 0".into());
+    }
+    let mut moved: u32 = 0;
+    'outer: for m in ctx
+        .db
+        .match_state()
+        .match_by_status()
+        .filter(MatchStatus::Ended)
+    {
+        let live: Vec<AuctionTopBid> = ctx
+            .db
+            .auction_top_bid()
+            .top_bid_by_match()
+            .filter(m.id)
+            .collect();
+        for t in live {
+            ctx.db
+                .auction_top_bid_archive()
+                .insert(AuctionTopBidArchive {
+                    auction_id: t.auction_id,
+                    match_id: t.match_id,
+                    top_bid: t.top_bid,
+                });
+            ctx.db.auction_top_bid().auction_id().delete(t.auction_id);
+            moved += 1;
+            if moved >= max_rows {
+                break 'outer;
+            }
+        }
+    }
+    log::info!("backfill_top_bid_archive moved {} rows", moved);
+    Ok(())
+}
+
 // ---------- Match control ----------
 // Matches now start via the lobby flow (see `join_lobby` /
 // `lobby_timeout_tick`) or via the tournament code. There's no direct
@@ -1597,6 +1673,26 @@ fn pair_into_matches(
 }
 
 fn on_match_ended(ctx: &ReducerContext, match_id: u64) {
+    // Move live top_bid rows into the public archive. Once a match ends,
+    // bots can't act on the info, so it's safe to expose; and pruning the
+    // private table keeps `visible_auction_top_bids` cheap to materialise.
+    let live: Vec<AuctionTopBid> = ctx
+        .db
+        .auction_top_bid()
+        .top_bid_by_match()
+        .filter(match_id)
+        .collect();
+    for t in live {
+        ctx.db
+            .auction_top_bid_archive()
+            .insert(AuctionTopBidArchive {
+                auction_id: t.auction_id,
+                match_id: t.match_id,
+                top_bid: t.top_bid,
+            });
+        ctx.db.auction_top_bid().auction_id().delete(t.auction_id);
+    }
+
     update_elo_at_match_end(ctx, match_id);
 
     let Some(tm) = ctx
@@ -1927,6 +2023,8 @@ fn get_or_init_stats(ctx: &ReducerContext, bot_id: u64) -> BotStats {
         wins: 0,
         total_score: 0,
         last_played: None,
+        openskill_mu: 25.0,
+        openskill_sigma: 8.333333333333334,
     })
 }
 
@@ -1991,6 +2089,30 @@ fn update_elo_at_match_end(ctx: &ReducerContext, match_id: u64) {
             ctx.db.bot_stats().insert(stats);
         }
     }
+}
+
+// Resets all BotStats and replays ELO across every ended match in chronological order.
+#[reducer]
+pub fn backfill_elo(ctx: &ReducerContext) -> Result<(), String> {
+    require_admin(ctx)?;
+
+    for stats in ctx.db.bot_stats().iter().collect::<Vec<_>>() {
+        ctx.db.bot_stats().bot_id().delete(stats.bot_id);
+    }
+
+    let mut ended: Vec<Match> = ctx
+        .db
+        .match_state()
+        .iter()
+        .filter(|m| m.status == MatchStatus::Ended)
+        .collect();
+    ended.sort_by_key(|m| m.ended_at);
+
+    for m in ended {
+        update_elo_at_match_end(ctx, m.id);
+    }
+
+    Ok(())
 }
 
 // ---------- Auction tick (scheduled) ----------

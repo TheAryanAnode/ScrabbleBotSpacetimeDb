@@ -11,12 +11,7 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  botId: __t.u64().primaryKey().name("bot_id"),
-  rating: __t.i32(),
-  matchesPlayed: __t.u32().name("matches_played"),
-  wins: __t.u32(),
-  totalScore: __t.i64().name("total_score"),
-  lastPlayed: __t.option(__t.timestamp()).name("last_played"),
-  openskillMu: __t.f64().name("openskill_mu"),
-  openskillSigma: __t.f64().name("openskill_sigma"),
+  auctionId: __t.u64().primaryKey().name("auction_id"),
+  matchId: __t.u64().name("match_id"),
+  topBid: __t.i64().name("top_bid"),
 });

@@ -80,11 +80,11 @@ Three steps end-to-end:
 
    `npm run generate` runs `node scripts/run-generate.mjs`, which prepends
    `~/.cargo/bin` and Homebrew’s keg-only rustup paths to `PATH` so `spacetime`
-   can find `rustc` for the wasm32 check. If you still see errors, add
-   `export PATH="/opt/homebrew/opt/rustup/bin:$PATH"` to your shell (see
-   `brew info rustup`). If your clone path contains a colon (`:`), Cargo can
+   can find `rustc` for the wasm32 check. If your clone path contains a colon (`:`), Cargo can
    fail on macOS; the same script sets `CARGO_TARGET_DIR` under `~/.cache/` so
    builds still succeed (or rename the parent folder, e.g. `Challenges-Hackathons`).
+   If `rustc` still isn’t found for `generate`, add `export PATH="/opt/homebrew/opt/rustup/bin:$PATH"` (see `brew info rustup`).
+   **Maincloud / deserialize errors (`can't deserialize … tag`, `RangeError: Offset is outside the bounds of the DataView`):** the client's `module_bindings` must list **every** table and column in the same order as the deployed module. If your fork's `spacetimedb/` is behind production (e.g. missing `auction_top_bid_archive` or `BotStats.openskill_*`), run `npm run generate:upstream` in `bot-starter`, or copy bindings from [clockworklabs/scrabblebot](https://github.com/clockworklabs/scrabblebot) `src/module_bindings/`, or set `STDB_MODULE_PATH` to a checkout that matches maincloud before `npm run generate`.
 
 3. **Edit `bot-starter/src/strategy.ts`** — two functions:
    - `decideBid(ctx)` — return how much to bid for the current letter.
